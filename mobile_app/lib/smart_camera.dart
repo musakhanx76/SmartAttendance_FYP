@@ -1,151 +1,178 @@
-import 'dart:io';
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
+import 'dart:async'; // Needed for the timer
 
 class SmartFaceCamera extends StatefulWidget {
-  final Function(File) onImageCaptured;
-
-  const SmartFaceCamera({super.key, required this.onImageCaptured});
+  final List<CameraDescription> cameras;
+  const SmartFaceCamera({Key? key, required this.cameras}) : super(key: key);
 
   @override
-  State<SmartFaceCamera> createState() => _SmartFaceCameraState();
+  _SmartFaceCameraState createState() => _SmartFaceCameraState();
 }
 
 class _SmartFaceCameraState extends State<SmartFaceCamera> {
-  CameraController? _controller;
-  Future<void>? _initializeControllerFuture;
-  bool _isTakingPicture = false;
+  late CameraController _controller;
+  bool _isInitialized = false;
+  bool _isRecording = false;
+  
+  // New State Variables for the Guided Scanner
+  int _currentStep = 0;
+  double _progress = 0.0;
+  Timer? _phaseTimer;
+
+  // The exact instructions the user will see
+  final List<String> _instructions = [
+    "Position face in the oval",
+    "Look straight at the camera...",
+    "Slowly turn head to the LEFT...",
+    "Now turn head to the RIGHT...",
+    "Processing..."
+  ];
 
   @override
   void initState() {
     super.initState();
-    _initCamera();
+    // Initialize the front camera (usually index 1)
+    _controller = CameraController(widget.cameras[1], ResolutionPreset.high);
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _isInitialized = true;
+      });
+    });
   }
 
-  Future<void> _initCamera() async {
-    // 1. Find available cameras
-    final cameras = await availableCameras();
-    // 2. Select the Front Camera (Selfie)
-    final frontCamera = cameras.firstWhere(
-      (camera) => camera.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
+  // THE UPGRADED GUIDED RECORDING SEQUENCE
+  Future<void> _startRecordingSequence() async {
+    if (_controller.value.isRecordingVideo) return;
 
-    // 3. Setup the controller with "Max" resolution for best details
-    _controller = CameraController(
-      frontCamera,
-      ResolutionPreset.max, // <--- THIS ENSURES "PIXELS AT ITS BEST"
-      enableAudio: false,
-    );
+    await _controller.startVideoRecording();
+    
+    setState(() {
+      _isRecording = true;
+      _currentStep = 1; // Phase 1: Look Straight
+      _progress = 0.33; // 33% complete
+    });
 
-    _initializeControllerFuture = _controller!.initialize();
-    if (mounted) setState(() {});
+    // Each phase gives the user 2.5 seconds to complete the head movement
+    const int phaseDurationMs = 2500; 
+
+    _phaseTimer = Timer.periodic(const Duration(milliseconds: phaseDurationMs), (timer) async {
+      setState(() {
+        _currentStep++;
+      });
+
+      if (_currentStep == 2) {
+        setState(() => _progress = 0.66); // 66% complete
+      } 
+      else if (_currentStep == 3) {
+        setState(() => _progress = 1.0); // 100% complete
+      } 
+      else if (_currentStep >= 4) {
+        // Sequence Finished. Stop recording and return the video.
+        timer.cancel();
+        XFile videoFile = await _controller.stopVideoRecording();
+        
+        setState(() {
+          _isRecording = false;
+        });
+        
+        Navigator.pop(context, videoFile.path); 
+      }
+    });
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _controller.dispose();
+    _phaseTimer?.cancel();
     super.dispose();
-  }
-
-  Future<void> _takePhoto() async {
-    if (_isTakingPicture) return;
-    setState(() => _isTakingPicture = true);
-
-    try {
-      await _initializeControllerFuture;
-      
-      // Capture the high-res image
-      final image = await _controller!.takePicture();
-      
-      // Send it back to the registration screen
-      widget.onImageCaptured(File(image.path));
-      
-    } catch (e) {
-      print(e);
-    } finally {
-      if (mounted) setState(() => _isTakingPicture = false);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_isInitialized) return const Center(child: CircularProgressIndicator());
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: FutureBuilder<void>(
-        future: _initializeControllerFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            return Stack(
-              alignment: Alignment.center,
+      body: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: CameraPreview(_controller),
+          ),
+          
+          ColorFiltered(
+            colorFilter: const ColorFilter.mode(Colors.black54, BlendMode.srcOut),
+            child: Stack(
               children: [
-                // 1. The Camera Feed
-                CameraPreview(_controller!),
-                
-                // 2. The "Face Lock" Overlay (Dark background with clear oval)
-                ColorFiltered(
-                  colorFilter: const ColorFilter.mode(
-                    Colors.black54, 
-                    BlendMode.srcOut,
-                  ),
-                  child: Stack(
-                    children: [
-                      Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.transparent,
-                          backgroundBlendMode: BlendMode.clear,
-                        ),
-                      ),
-                      Align(
-                        alignment: Alignment.center,
-                        child: Container(
-                          height: 350,
-                          width: 250,
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            shape: BoxShape.rectangle,
-                            borderRadius: BorderRadius.circular(150) // Makes it an oval
-                          ),
-                        ),
-                      ),
-                    ],
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.transparent,
+                    backgroundBlendMode: BlendMode.dstOut,
                   ),
                 ),
-
-                // 3. Instructions
-                const Positioned(
-                  top: 100,
-                  child: Text(
-                    "Align Face in Oval",
-                    style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                ),
-
-                // 4. Capture Button
-                Positioned(
-                  bottom: 50,
-                  child: GestureDetector(
-                    onTap: _takePhoto,
-                    child: Container(
-                      height: 80,
-                      width: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                        border: Border.all(color: Colors.blueAccent, width: 4),
-                      ),
-                      child: _isTakingPicture 
-                        ? const CircularProgressIndicator() 
-                        : const Icon(Icons.face, size: 40, color: Colors.blueAccent),
+                Center(
+                  child: Container(
+                    width: 280,
+                    height: 380,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(200),
                     ),
                   ),
                 ),
               ],
-            );
-          } else {
-            return const Center(child: CircularProgressIndicator());
-          }
-        },
+            ),
+          ),
+          
+          Positioned(
+            bottom: 80,
+            child: Column(
+              children: [
+                // Dynamic Instruction Text
+                Text(
+                  _instructions[_currentStep],
+                  style: const TextStyle(
+                    color: Colors.white, 
+                    fontSize: 20, 
+                    fontWeight: FontWeight.bold,
+                    shadows: [Shadow(color: Colors.black, blurRadius: 10)]
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 30),
+                
+                GestureDetector(
+                  onTap: _isRecording ? null : _startRecordingSequence,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 90,
+                        height: 90,
+                        child: CircularProgressIndicator(
+                          value: _isRecording ? _progress : 0.0,
+                          strokeWidth: 8,
+                          // Progress bar turns blue while scanning, green when done
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            _progress == 1.0 ? Colors.green : Colors.blueAccent
+                          ),
+                          backgroundColor: Colors.white24,
+                        ),
+                      ),
+                      Icon(
+                        _isRecording ? Icons.face : Icons.camera_alt,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -4,7 +4,12 @@ from .models import Student , ClassSession
 class StudentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
-        fields = ['name', 'rollNo', 'image'] # Ensure these match the model above
+        # CHANGED: Swapped 'image' for 'face_video'
+        fields = ['name', 'rollNo', 'face_video']
+"""class StudentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Student
+        fields = ['name', 'rollNo', 'image'] """# Ensure these match the model above
 
 class ClassSessionSerializer(serializers.ModelSerializer):
     class Meta:

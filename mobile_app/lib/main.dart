@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'smart_camera.dart'; // Import our new camera file
 
@@ -22,31 +23,35 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController rollNoController = TextEditingController();
-  File? _image;
+  File? _videoFile;
   
   // Base URL pointing to your laptop's IP address
   final Dio _dio = Dio(BaseOptions(baseUrl: 'http://192.168.100.5:8000'));
   bool _isUploading = false;
 
-  // This function opens our Custom Smart Camera
-  void _openSmartCamera() {
-    Navigator.push(
+
+  void _openSmartCamera() async {
+    // 1. Get the available cameras on the phone
+    final cameras = await availableCameras();
+
+    // 2. Open the camera screen and wait for it to return a file path
+    final String? videoPath = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SmartFaceCamera(
-          onImageCaptured: (File capturedImage) {
-            setState(() {
-              _image = capturedImage;
-            });
-            Navigator.pop(context); // Close camera after taking photo
-          },
-        ),
+        builder: (context) => SmartFaceCamera(cameras: cameras),
       ),
     );
+
+    // 3. If a video was recorded successfully, save it to our state
+    if (videoPath != null) {
+      setState(() {
+        _videoFile = File(videoPath); 
+      });
+    }
   }
 
   Future<void> _register() async {
-    if (_image == null) {
+    if (_videoFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Face scan required!"))
       );
@@ -55,50 +60,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isUploading = true);
 
-    try {
-      String fileName = _image!.path.split('/').last;
-      
-      // FIXED: Labels match your Django Serializer fields exactly
+   try {
       FormData formData = FormData.fromMap({
         "name": nameController.text,
-        "rollNo": rollNoController.text, 
-        "image": await MultipartFile.fromFile(_image!.path, filename: fileName),
+        "rollNo": rollNoController.text,
+        "face_video": await MultipartFile.fromFile(_videoFile!.path, filename: "student.mp4"),
       });
 
       // Sending data to the Django /register/ endpoint
       Response response = await _dio.post('/register/', data: formData);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Server: ${response.data['message']}"),
-            backgroundColor: Colors.green,
-          )
-        );
-      }
-      
-    } catch (e) {
-      String errorMsg = "Registration Failed";
-      
-      // Extracts specific error messages from Django if validation fails (400 error)
-      if (e is DioException && e.response != null) {
-        errorMsg = e.response?.data['message'] ?? e.response?.data.toString() ?? "Server Error";
-      } else {
-        errorMsg = e.toString();
+      // THE FIX: Check for success, stop the spinner, and reset the form!
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        setState(() {
+          _isUploading = false;      // 1. Stop the loading circle
+          _videoFile = null;         // 2. Reset the Face Scan circle back to grey
+          nameController.clear();    // 3. Empty the Name text box
+          rollNoController.clear();  // 4. Empty the Roll No text box
+        });
+
+        // Show a nice green success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Student Enrolled Successfully!"), 
+              backgroundColor: Colors.green
+            ),
+          );
+        }
       }
 
+    } catch (e) {
+      // If something goes wrong, stop the spinner so the user can try again
+      setState(() => _isUploading = false);
+      
+      if (e is DioException) {
+        print("DIO ERROR: ${e.response?.statusCode} - ${e.response?.data}");
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red)
+          SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isUploading = false);
       }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,7 +135,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             const SizedBox(height: 30),
 
-            // THE FACE SCAN AREA
+           // THE FACE SCAN AREA
             GestureDetector(
               onTap: _openSmartCamera,
               child: Container(
@@ -139,23 +145,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   color: Colors.grey[200],
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: _image == null ? Colors.grey : Colors.green, 
+                    color: _videoFile == null ? Colors.grey : Colors.green,
                     width: 4
                   ),
-                  image: _image != null 
-                    ? DecorationImage(image: FileImage(_image!), fit: BoxFit.cover)
-                    : null
                 ),
-                child: _image == null 
+                child: _videoFile == null 
                   ? const Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.face_retouching_natural, size: 50, color: Colors.blue),
-                        Text("Tap to Scan Face", style: TextStyle(fontWeight: FontWeight.bold))
+                        Text("Tap to Scan Face", style: TextStyle(fontWeight: FontWeight.bold)),
                       ],
                     )
-                  : null,
-              ),
+                  : const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle, size: 50, color: Colors.green),
+                        Text("Scan Complete!", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+              ), // Container ends cleanly here!
             ),
             
             const SizedBox(height: 30),
