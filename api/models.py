@@ -7,6 +7,9 @@ class Student(models.Model):
     # CHANGED: ImageField is now FileField to accept .mp4 videos
     face_video = models.FileField(upload_to='student_videos/') 
 
+# NEW: This will store the 128-number mathematical face blueprint
+    face_encoding = models.JSONField(null=True, blank=True)
+    
     def __str__(self):
         return f"{self.name} - {self.rollNo}"
 """class Student(models.Model):
