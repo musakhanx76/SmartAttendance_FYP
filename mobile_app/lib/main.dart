@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'smart_camera.dart'; // Import our new camera file
+import 'screens/teacher_dashboard.dart';
+import 'screens/welcome_screen.dart';
 
 void main() {
   // Ensures plugins are loaded before app starts
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: RegisterScreen(),
+    home: const WelcomeScreen(),
   ));
 }
 
@@ -26,7 +28,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   File? _videoFile;
   
   // Base URL pointing to your laptop's IP address
-  final Dio _dio = Dio(BaseOptions(baseUrl: 'http://192.168.100.5:8000'));
+  final Dio _dio = Dio(BaseOptions(baseUrl: 'http://10.22.121.6:8000'));
   bool _isUploading = false;
 
 

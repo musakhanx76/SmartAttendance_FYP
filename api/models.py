@@ -28,9 +28,21 @@ class ClassSession(models.Model):
     def __str__(self):
         return f"{self.subject_name} ({self.class_code})"
 
-class Attendance(models.Model):
+"""class Attendance(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
     session = models.ForeignKey(ClassSession, on_delete=models.CASCADE)
     date = models.DateField(auto_now_add=True)
     time = models.TimeField(auto_now_add=True)
-    is_present = models.BooleanField(default=True)
+    is_present = models.BooleanField(default=True)"""
+class Attendance(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    date = models.DateField(auto_now_add=True)  # Automatically grabs today's date
+    time = models.TimeField(auto_now_add=True)  # Automatically grabs the exact time
+    status = models.CharField(max_length=20, default="Present")
+
+    class Meta:
+        # This prevents a student from being marked present twice on the same day!
+        unique_together = ('student', 'date') 
+
+    def __str__(self):
+        return f"{self.student.name} - {self.date} - {self.status}"

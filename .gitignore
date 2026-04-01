@@ -1,0 +1,17 @@
+# Python / Django
+venv/
+__pycache__/
+*.pyc
+db.postgresql
+media/
+
+# Flutter / Dart
+mobile_app/build/
+mobile_app/.dart_tool/
+mobile_app/.pub-cache/
+mobile_app/.pub/
+*.iml
+
+# IDEs
+.vscode/
+.idea/
