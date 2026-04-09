@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'teacher_dashboard.dart';
+import 'login_screen.dart';
 import '../main.dart'; // Importing your RegisterScreen from main.dart
 
 class WelcomeScreen extends StatelessWidget {
@@ -58,19 +59,34 @@ class WelcomeScreen extends StatelessWidget {
               
               const SizedBox(height: 16),
 
-              // Student Button
-              _buildRoleButton(
+              // Student Login Button
+          _buildRoleButton(
+            context,
+            title: 'Student Login',
+            icon: Icons.login_rounded,
+            color: Colors.indigo,
+            onTap: () {
+              Navigator.push(
                 context,
-                title: 'I am a Student',
-                icon: Icons.face_retouching_natural_rounded,
-                color: Colors.indigo,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const RegisterScreen()),
-                  );
-                },
-              ),
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          
+          // Student Registration Button
+          _buildRoleButton(
+            context,
+            title: 'New Student Registration',
+            icon: Icons.face_retouching_natural_rounded,
+            color: Colors.blueAccent,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RegisterScreen()),
+              );
+            },
+          ),
               const SizedBox(height: 40),
             ],
           ),

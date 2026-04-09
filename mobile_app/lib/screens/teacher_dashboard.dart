@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'create_class_screen.dart';
 import 'take_attendance_screen.dart';
-import 'delete_student_screen.dart';
-
+import 'view_reports_screen.dart';
+import 'pending_requests_screen.dart';
+import 'my_classes_screen.dart';
 class TeacherDashboard extends StatelessWidget {
   const TeacherDashboard({Key? key}) : super(key: key);
 
@@ -89,22 +90,36 @@ class TeacherDashboard extends StatelessWidget {
                     icon: Icons.analytics_rounded,
                     color: Colors.orangeAccent,
                     onTap: () {
-                      // TODO: Navigate to Reports Screen
-                      print("Navigating to Reports...");
-                    },
-                  ),
-                  _buildDashboardCard(
-                    context,
-                    title: 'My Students',
-                    icon: Icons.people_alt_rounded,
-                    color: Colors.deepPurpleAccent,
-                    onTap: () {
                       Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const DeleteStudentScreen()),
+                      MaterialPageRoute(builder: (context) => const ViewReportsScreen()),
                      );
                     },
                   ),
+                  _buildDashboardCard(
+                   context,
+                   title: 'My Classes', // Renamed to make more sense!
+                   icon: Icons.folder_shared_rounded,
+                   color: Colors.deepPurpleAccent,
+                   onTap: () {
+                     Navigator.push(
+                     context,
+                     MaterialPageRoute(builder: (context) => const MyClassesScreen()),
+                    );
+                   },
+                  ),
+                  _buildDashboardCard(
+                   context,
+                   title: 'Pending Approvals',
+                   icon: Icons.person_add_alt_1_rounded,
+                   color: Colors.redAccent,
+                   onTap: () {
+                    Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const PendingRequestsScreen()),
+                );
+              },
+            ),
                 ],
               ),
             ),

@@ -6,7 +6,8 @@ from .serializers import StudentSerializer
 """from .models import Student
 from .ai_utils import extract_face_blueprint # Import our new AI Brain"""
 from django.core.files.storage import FileSystemStorage
-from .models import Student, Attendance
+from .models import Student, Attendance, ClassRoom, Enrollment , ClassSession
+from datetime import date
 from .ai_utils import extract_face_blueprint, scan_classroom_faces
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -51,12 +52,7 @@ def register_student(request):
             )
             
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
-
-
+#for marking attendance
 @api_view(['POST'])
 def mark_attendance(request):
     """
@@ -114,7 +110,7 @@ def mark_attendance(request):
         fs.delete(filename) # Ensure we still clean up if it crashes
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    
+#for deleting student    
 @csrf_exempt
 def delete_student(request, roll_number):
     if request.method == 'DELETE':
@@ -137,6 +133,155 @@ def delete_student(request, roll_number):
             return JsonResponse({'status': 'error', 'message': 'Student not found.'}, status=404)
             
     return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=400)
+
+#for getting attendance report
+@api_view(['GET'])
+def get_attendance_report(request, date_str):
+    """
+    Receives a date (YYYY-MM-DD) from Flutter and returns 
+    a list of all students marked present on that specific day.
+    """
+    try:
+        # Ask the database for all attendance records matching the requested date
+        records = Attendance.objects.filter(date=date_str)
+        
+        if not records.exists():
+            return Response({"message": "No attendance records found for this date.", "records": []}, status=status.HTTP_200_OK)
+
+        # Package the data neatly for Flutter
+        data = []
+        for record in records:
+            data.append({
+                "name": record.student.name,
+                "rollNo": record.student.rollNo,
+                "time": record.time.strftime("%I:%M %p"), # Formats time to '02:30 PM'
+                "status": record.status
+            })
+            
+        return Response({
+            "message": f"Found {len(data)} records.", 
+            "date": date_str, 
+            "records": data
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    
+    
+
+
+# ==========================================
+# LMS GOOGLE CLASSROOM SYSTEM ENDPOINTS
+# ==========================================
+
+#Student Requesting to join a class using a code
+@api_view(['POST'])
+def join_class(request):
+    roll_no = request.data.get('rollNo')
+    join_code = request.data.get('join_code')
+
+    try:
+        student = Student.objects.get(rollNo__iexact=roll_no)
+        classroom = ClassRoom.objects.get(join_code=join_code)
+
+        # Check if they already sent a request or are already enrolled
+        enrollment, created = Enrollment.objects.get_or_create(
+            student=student,
+            classroom=classroom
+        )
+
+        if not created:
+            status_msg = "Approved" if enrollment.is_approved else "Pending"
+            return Response({"message": f"You already have a {status_msg} request for this class."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"message": f"Request sent to join {classroom.course_code}. Waiting for teacher approval!"}, status=status.HTTP_201_CREATED)
+
+    except Student.DoesNotExist:
+        return Response({"error": "Student not found. Please register your face first."}, status=status.HTTP_404_NOT_FOUND)
+    except ClassRoom.DoesNotExist:
+        return Response({"error": "Invalid Class Code. Please check the WhatsApp group."}, status=status.HTTP_404_NOT_FOUND)
+
+#for teacher Viewing all pending requests
+@api_view(['GET'])
+def get_pending_requests(request):
+    try:
+        pending = Enrollment.objects.filter(is_approved=False)
+        data = []
+        for req in pending:
+            data.append({
+                "enrollment_id": req.id,
+                "student_name": req.student.name,
+                "rollNo": req.student.rollNo,
+                "class_name": req.classroom.name,
+                "course_code": req.classroom.course_code,
+                "date": req.request_date.strftime("%b %d, %Y")
+            })
+        return Response({"requests": data}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+#for teacher Approve a student's request
+@api_view(['POST'])
+def approve_student(request, enrollment_id):
+    try:
+        enrollment = Enrollment.objects.get(id=enrollment_id)
+        enrollment.is_approved = True
+        enrollment.save()
+        return Response({"message": f"{enrollment.student.name} approved for {enrollment.classroom.course_code}!"}, status=status.HTTP_200_OK)
+    except Enrollment.DoesNotExist:
+        return Response({"error": "Request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#for teacher approving the finalized list of "My Students"
+@api_view(['GET'])
+def get_approved_students(request):
+    try:
+        # Fetch ONLY students where the teacher clicked "Approve"
+        approved = Enrollment.objects.filter(is_approved=True)
+        
+        data = []
+        for item in approved:
+            data.append({
+                "enrollment_id": item.id,
+                "student_name": item.student.name,
+                "rollNo": item.student.rollNo,
+                "class_name": item.classroom.name,
+                "course_code": item.classroom.course_code
+            })
+        return Response({"students": data}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#for removing students from the class
+@api_view(['DELETE'])
+def remove_student_from_class(request, enrollment_id):
+    """Allows a teacher to remove a student from a specific class."""
+    try:
+        enrollment = Enrollment.objects.get(id=enrollment_id)
+        student_name = enrollment.student.name
+        class_name = enrollment.classroom.course_code
+        enrollment.delete() # This only deletes the connection, not the student's face from the DB!
+        return Response({"message": f"{student_name} removed from {class_name}."}, status=status.HTTP_200_OK)
+    except Enrollment.DoesNotExist:
+        return Response({"error": "Student is not in this class."}, status=status.HTTP_404_NOT_FOUND)
+
+#for student login
+@api_view(['POST'])
+def student_login(request):
+    roll_no = request.data.get('rollNo')
+    password = request.data.get('password')
+
+    try:
+        # Find the student
+        student = Student.objects.get(rollNo__iexact=roll_no)
+        
+        # Check if password matches
+        if student.password == password:
+            return Response({"message": "Login successful!"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "Incorrect password."}, status=status.HTTP_401_UNAUTHORIZED)
+            
+    except Student.DoesNotExist:
+        return Response({"error": "Student not found. Please register first."}, status=status.HTTP_404_NOT_FOUND)
 """from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser

@@ -5,7 +5,7 @@ class StudentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
         # CHANGED: Swapped 'image' for 'face_video'
-        fields = ['name', 'rollNo', 'face_video']
+        fields = ['name', 'rollNo', 'face_video', 'password']
 """class StudentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student

@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'smart_camera.dart'; // Import our new camera file
 import 'screens/teacher_dashboard.dart';
 import 'screens/welcome_screen.dart';
+import 'screens/student_dashboard.dart';
 
 void main() {
   // Ensures plugins are loaded before app starts
@@ -25,10 +26,11 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController rollNoController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
   File? _videoFile;
   
   // Base URL pointing to your laptop's IP address
-  final Dio _dio = Dio(BaseOptions(baseUrl: 'http://10.22.121.6:8000'));
+  final Dio _dio = Dio(BaseOptions(baseUrl: 'http://192.168.100.5:8000'));
   bool _isUploading = false;
 
 
@@ -66,6 +68,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       FormData formData = FormData.fromMap({
         "name": nameController.text,
         "rollNo": rollNoController.text,
+        'password': passwordController.text.trim(),
         "face_video": await MultipartFile.fromFile(_videoFile!.path, filename: "student.mp4"),
       });
 
@@ -79,6 +82,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           _videoFile = null;         // 2. Reset the Face Scan circle back to grey
           nameController.clear();    // 3. Empty the Name text box
           rollNoController.clear();  // 4. Empty the Roll No text box
+          passwordController.clear();
         });
 
         // Show a nice green success message
@@ -88,6 +92,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               content: Text("Student Enrolled Successfully!"), 
               backgroundColor: Colors.green
             ),
+          );
+
+          Navigator.pushReplacement(
+           context,
+           MaterialPageRoute(builder: (context) => const StudentDashboard()),
           );
         }
       }
@@ -135,6 +144,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
               controller: rollNoController, 
               decoration: const InputDecoration(labelText: "Roll Number", border: OutlineInputBorder())
             ),
+            const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: true, // Hides the typing
+                decoration: InputDecoration(
+                  labelText: 'Create a Password',
+                  prefixIcon: const Icon(Icons.lock),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              ),
             const SizedBox(height: 30),
 
            // THE FACE SCAN AREA
